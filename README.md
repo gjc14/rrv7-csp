@@ -1,3 +1,12 @@
+# Before You Start
+
+Generating `entry.server.tsx`
+By default, React Router will handle generating the HTTP Response for you. You can reveal the default entry server file with the following:
+
+```
+npx react-router reveal
+```
+
 # Welcome to React Router!
 
 A modern, production-ready template for building full-stack React applications using React Router.
