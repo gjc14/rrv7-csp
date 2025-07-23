@@ -7,6 +7,57 @@ By default, React Router will handle generating the HTTP Response for you. You c
 npx react-router reveal
 ```
 
+## Alternative: Generate and set headers in root `loader()`
+
+```tsx
+// root.tsx
+export const headers = ({ loaderHeaders }: Route.HeadersArgs) => {
+  return loaderHeaders;
+};
+
+export const loader = ({ context }: Route.LoaderArgs) => {
+  const nonce = generateNonce();
+  const headers = {
+    [process.env.NODE_ENV === "production"
+      ? "Content-Security-Policy"
+      : "Content-Security-Policy-Report-Only"]: getContentSecurityPolicy(nonce),
+    /** @see https://developer.mozilla.org/zh-TW/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security */
+    "Strict-Transport-Security": "max-age=3600", // 1 hour. HTTPS only
+    "X-Frame-Options": "SAMEORIGIN", // Prevent clickjacking
+    "X-Content-Type-Options": "nosniff", // Prevent MIME type sniffing
+  };
+  context.set(nonceContext, nonce);
+  return data({ nonce }, { headers });
+};
+```
+
+and get the context in `entry.server.tsx` the same way:
+
+```tsx
+export default function handleRequest(props) {
+  let nonce: string;
+
+  try {
+    // If root headers does not set, there will not be a nonce
+    nonce = loadContext.get(nonceContext);
+  } catch (error) {
+    nonce = generateNonce();
+    console.warn("No nonce found in context, generating a fallback.");
+  }
+
+  // ...
+  const { pipe, abort } = renderToPipeableStream(
+    <ServerRouter context={routerContext} url={request.url} nonce={nonce} />,
+    //                                                      ^ pass nonce to <ServerRouter>
+    {
+      nonce, // and renderToPipeableStream
+      // ...
+    }
+  );
+  // ...
+}
+```
+
 # Welcome to React Router!
 
 A modern, production-ready template for building full-stack React applications using React Router.
