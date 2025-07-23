@@ -8,7 +8,53 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+/** [Unsolved] In dev mode vite injects <style> without nonce, causing CSP issues. */
 import "./app.css";
+
+import { useNonce } from "./hooks/use-nonce";
+import {
+  generateNonce,
+  getContentSecurityPolicy,
+  nonceContext,
+} from "./middleware/csp";
+
+const headersMiddleware: Route.unstable_MiddlewareFunction = async (
+  { context, request },
+  next
+) => {
+  const nonce = generateNonce();
+
+  const headers = {
+    [process.env.NODE_ENV === "production"
+      ? "Content-Security-Policy"
+      : "Content-Security-Policy-Report-Only"]: getContentSecurityPolicy(nonce),
+    /** @see https://developer.mozilla.org/zh-TW/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security */
+    "Strict-Transport-Security": "max-age=3600", // 1 hour. HTTPS only
+    "X-Frame-Options": "SAMEORIGIN", // Prevent clickjacking
+    "X-Content-Type-Options": "nosniff", // Prevent MIME type sniffing
+  };
+
+  context.set(nonceContext, nonce);
+
+  try {
+    const response = await next();
+    for (const [key, value] of Object.entries(headers)) {
+      response.headers.set(key, value);
+    }
+
+    return response;
+  } catch (error) {
+    if (isRouteErrorResponse(error)) {
+      console.error("Route error response:", error.status, error.statusText);
+      throw error.data;
+    }
+    throw error;
+  }
+};
+
+export const unstable_middleware: Route.unstable_MiddlewareFunction[] = [
+  headersMiddleware,
+];
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -23,19 +69,29 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+export const loader = ({ context }: Route.LoaderArgs) => {
+  return { nonce: context.get(nonceContext) };
+};
+
 export function Layout({ children }: { children: React.ReactNode }) {
+  const nonce = useNonce();
+
   return (
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {
+          /** Vite looks for this meta tag to inject the nonce @see https://vite.dev/guide/features.html#nonce-random */
+          import.meta.env.DEV && <meta property="csp-nonce" nonce={nonce} />
+        }
         <Meta />
         <Links />
       </head>
       <body>
         {children}
-        <ScrollRestoration />
-        <Scripts />
+        <ScrollRestoration nonce={nonce} />
+        <Scripts nonce={nonce} />
       </body>
     </html>
   );
