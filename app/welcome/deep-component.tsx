@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useHydrated } from "~/hooks/use-hydrated";
 import { useNonce } from "~/hooks/use-nonce";
 
@@ -12,6 +13,20 @@ export function InlineDemo() {
   const isHydrated = useHydrated();
 
   const safeNonce = isHydrated ? nonce : undefined;
+
+  useEffect(() => {
+    if (isHydrated && nonce) {
+      const script = document.createElement("script");
+      // Try to comment the next line to see if it works without nonce
+      script.nonce = nonce;
+      script.text = "alert('inline script!')";
+      document.body.appendChild(script);
+
+      return () => {
+        document.body.removeChild(script);
+      };
+    }
+  }, [isHydrated, nonce]);
 
   return (
     <>
